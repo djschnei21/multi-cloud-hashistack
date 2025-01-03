@@ -5,11 +5,20 @@ set -e
 echo '${consul_ca_file}' | sudo base64 -d > /etc/consul.d/ca.pem
 echo '${consul_config_file}' | sudo base64 -d > /etc/consul.d/client.temp.0
 jq '.bind_addr = "'$(ec2metadata --local-ipv4)'"' /etc/consul.d/client.temp.0 > /etc/consul.d/client.temp.1
-jq --arg token "${consul_acl_token}" '.acl += {"tokens":{"agent":"\($token)"}}' /etc/consul.d/client.temp.1 > /etc/consul.d/client.temp.2
+jq --arg token "${consul_acl_token}" '.acl += {"tokens":{"default":"\($token)"}}' /etc/consul.d/client.temp.1 > /etc/consul.d/client.temp.2
 jq '.tls.defaults.ca_file = "/etc/consul.d/ca.pem"' /etc/consul.d/client.temp.2 > /etc/consul.d/client.temp.3
 jq '.ports = {"grpc":8502}' /etc/consul.d/client.temp.3 > /etc/consul.d/consul.json
 
 sudo systemctl restart consul
+
+# Configure systemd-resolved for Consul DNS forwarding
+sudo mkdir /etc/etc/systemd/resolved.conf.d
+sudo echo "[Resolve]
+DNS=127.0.0.1:8600
+DNSSEC=false
+Domains=~consul" > consul.conf
+
+sudo systemctl restart systemd-resolved
 
 # Create Nomad configuration file
 cat <<EOF > /etc/nomad.d/nomad.hcl
